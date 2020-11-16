@@ -1,25 +1,13 @@
+#!/usr/bin bash
+
+clear
 
 SCRIPT_PATH="$(dirname $0)"
-FILE_NAME=${1:-report.md}
+FILE_NAME=${1:-info.md}
 OUTPUT_FILE="$SCRIPT_PATH/$FILE_NAME"
 
-if [ $# -eq 0 ]
-  then
-    echo -e "Générer dans un fichier [\e[34m$FILE_NAME\e[0m] : "
-    read -p " > " OUTPUT_FILE_SELECTED
-    if [[ ! -z "$OUTPUT_FILE_SELECTED" ]] 
-        then 
-            OUTPUT_FILE=$SCRIPT_PATH$OUTPUT_FILE_SELECTED
-    fi 
-fi
-
-OUTPUT_FILE_DATA=$SCRIPT_PATH/$(basename "$OUTPUT_FILE" ".md")".data"
-
-echo "Chemin complet (report): $OUTPUT_FILE"
-echo "Chemin complet:(data) $OUTPUT_FILE_DATA"
-echo -n "" > "$OUTPUT_FILE_DATA"
 echo -e "# Informations système\n" > "./$OUTPUT_FILE"
-echo -n -e "Créé en $(date +%F-%H%M%S)\nBy user" >> "./$OUTPUT_FILE"
+echo -n -e "Créé en $(date +%F-%H%M%S)\nBy user " >> "./$OUTPUT_FILE"
 whoami >> "./$OUTPUT_FILE"
 echo -e "" >> "./$OUTPUT_FILE"
 
@@ -37,36 +25,29 @@ function getInformation ()
     fi
     VALUE="$($CMD_LINE 2> err.txt)"
     echo -n "- $TITLE " | sed -r 's/\\b\# //'
-    echo -e "-- START $CMD_NAME" >> "$OUTPUT_FILE_DATA"
     if [[ $VALUE ]]; then
         echo -e "## $TITLE\n\n\`\`\`text\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
-        echo -e "$VALUE" >> "$OUTPUT_FILE_DATA"
         echo -e "\e[32mok\e[0m"
     else
         echo -e "\e[31mX\e[0m"
         COMMANDS_NO_AVAILABLE+="- $CMD_NAME\n"
     fi
-    echo -e "-- END $CMD_NAME" >> "$OUTPUT_FILE_DATA"
 }
 
-function getNotSudoInformation ()
+function addInformation ()
 {
-    TITLE=$1
-    CMD_NAME=$2
-    CMD_LINE=${3:-$2}
+    CMD_LINE=$1
+    if [[ $I_AM != 'root' ]]; then
+        CMD_LINE="sudo $CMD_LINE"
+    fi
     VALUE="$($CMD_LINE 2> err.txt)"
-    echo -n "- $TITLE " | sed -r 's/\\b\# //'
     if [[ $VALUE ]]; then
-        echo -e "## $TITLE\n\n\`\`\`text\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
-        echo -e "\e[32mok\e[0m"
-    else
-        echo -e "\e[31mX\e[0m"
-        COMMANDS_NO_AVAILABLE+="- $CMD_NAME\n"
+        echo -e "\`\`\`text\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
     fi
 }
 
 # Bios
-getInformation "Bios" 'dmidecode' 'dmidecode -q'
+getInformation "Bios" 'dmidecode' 'dmidecode -q | head -n 100'
 
 # Nom du système d'exploitation
 getInformation "Informations d'utilisation actuelle" 'uname' "uname -a"
@@ -108,24 +89,15 @@ getInformation "Adresses IPs" 'ip addr'
 # Les routeurs
 getInformation "Les routeurs" 'ip route'
 
-# Liens réseau
-getInformation "Liens réseau" 'ip link' "ip link"
-
 # Espace partitionné
 getInformation "Espace partitionné" 'df' "df -h"
-
-# Appareils de montage
-getInformation "Appareils de montage" 'mount'
 
 # Liste des services
 getInformation "Liste des services" 'service' "service --status-all"
 getInformation "\b# System Control Services" 'systemctl' "systemctl --all"
 
 # Sockets status
-getInformation "Sockets status" 'ss' "ss -ltup"
-
-# État du pare-feu
-getInformation "État du pare-feu" 'ufw' "ufw status"
+getInformation "Sockets status" 'ss' "ss -ltup | sort"
 
 # Paquets
 echo -e "## Paquets\n" >> "./$OUTPUT_FILE"
@@ -160,11 +132,75 @@ getInformation "\b# OpenSuSE" 'zypper' "zypper se --installed-only"
 
 echo -e "## Logiciels\n" >> "./$OUTPUT_FILE"
 
-# Tous les logiciels
-getNotSudoInformation "\b# Tous les logiciels" 'compgen' "compgen -c"
-getInformation "\b# Root logiciel" 'sudo ls' "ls ${PATH//:/ }"
-getInformation "\b# User logiciel" 'ls' "ls ${PATH//:/ }"
-getNotSudoInformation "\b# Desktop apps" 'ShareApps' "ls /usr/share/applications"
+# Enviroment vars
+getInformation "Enviroment" 'printenv'
+
+## Test command
+if command -v httpd &> /dev/null
+then
+    read -p "C'est un problème avec Apache (httpd) ? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+        getInformation "\b# Apache" 'Apache' "httpd -S -M -t -D DUMP_INCLUDES"
+        addInformation "httpd -v"
+    fi
+fi
+
+if command -v mongod &> /dev/null
+then
+    read -p "C'est un problème avec MongoDB ? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+        getInformation "\b# MongoDB" 'MongoDB' "mongod --version"
+        addInformation "mongod --sysinfo"
+        read -p "Nom de base de donnée ? " MONGO_DATABASE
+        addInformation "mongo ${MONGO_DATABASE} --eval 'db.stats()'"
+        addInformation "mongo ${MONGO_DATABASE} --eval 'db.serverStatus()'"
+    fi
+fi
+
+if command -v mongod &> /dev/null
+then
+    read -p "C'est un problème avec PostgreSQL ? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+        getInformation "\b# PostgreSQL" 'PostgreSQL' "psql --version"
+        addInformation "cat /var/lib/postgresql/data/postgresql.conf"
+        read -p "Postgres user ? " PSQL_USER
+        addInformation "psql -U ${PSQL_USER} -c '\help'"
+        addInformation "psql -U ${PSQL_USER} -c 'SELECT * FROM pg_stat_activity ORDER BY backend_start DESC LIMIT 250'"
+    fi
+fi
+
+read -p "Voulez-vous une analyse du processus avec erreur? ? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    echo "Installation de libreries"
+    sudo apt-get -y install strace sysstat
+    getInformation "Swap" 'Swap' "sysctl vm.swappiness"
+    read -p "Nom de processus ? " PROCES_NAME
+    PROCESS_ID=$(ps -C ${PROCES_NAME} -o pid= | head -n 1)
+    echo "Monitoring PID" $PROCESS_ID
+    sudo strace -c -f -p $PROCESS_ID 1>> strace.log 2>&1 &
+    top -d5 -n5 -b >> top_report.log &
+    iostat -x -k -N -d 5 20 >> IOstat.log &
+    echo "Lancer votre processus"
+    read -p "Attendez la fin et appuyez sur une touche" -n 1 -r
+    PID_TO_KILL=$(ps -C strace -o pid= | head -n 1)
+    echo "Kill task strace " $PID_TO_KILL
+    sudo kill $PID_TO_KILL
+    PID_TO_KILL=$(ps -C top -o pid= | head -n 1)
+    echo "Kill task top " $PID_TO_KILL
+    kill $PID_TO_KILL
+    PID_TO_KILL=$(ps -C iostat -o pid= | head -n 1)
+    echo "Kill task iostat " $PID_TO_KILL
+    kill $PID_TO_KILL
+
+fi
 
 # Error report
 echo -e $COMMANDS_NO_AVAILABLE >> "./$OUTPUT_FILE"
@@ -173,6 +209,12 @@ echo -e "## Errors\n" >> "./$OUTPUT_FILE"
 
 cat err.txt >> "./$OUTPUT_FILE"
 
-rm -f err.txt
+rm -f ./err.txt
 
 sed -i $'s/ \b//' "./$OUTPUT_FILE"
+
+## Compresser les fichiers
+ZIP_FILE="logs-$(date +%F-%H%M%S).zip"
+zip -rm $ZIP_FILE . -i '*.log'  -i '*.md'
+
+echo "Envoyer le fichier: $ZIP_FILE"
