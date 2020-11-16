@@ -26,7 +26,7 @@ function getInformation ()
     VALUE="$($CMD_LINE 2> err.txt)"
     echo -n "- $TITLE " | sed -r 's/\\b\# //'
     if [[ $VALUE ]]; then
-        echo -e "## $TITLE\n\n\`\`\`text\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
+        echo -e "## $TITLE\n\n\`\`\`console\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
         echo -e "\e[32mok\e[0m"
     else
         echo -e "\e[31mX\e[0m"
@@ -42,7 +42,7 @@ function addInformation ()
     fi
     VALUE="$($CMD_LINE 2> err.txt)"
     if [[ $VALUE ]]; then
-        echo -e "\`\`\`text\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
+        echo -e "\`\`\`console\n$VALUE\n\`\`\`\n\n" >> "./$OUTPUT_FILE"
     fi
 }
 
@@ -51,7 +51,7 @@ getInformation "Bios" 'dmidecode' 'dmidecode -q | head -n 100'
 
 # Nom du système d'exploitation
 getInformation "Informations d'utilisation actuelle" 'uname' "uname -a"
-getInformation "\b# Dsitribution" 'dsitro' "cat /etc/os-release"
+getInformation "\b# Distribution" 'dsitro' "cat /etc/os-release"
 
 # Vérification de la configuration
 getInformation "Vérification de la configuration" 'chkconfig'
@@ -130,10 +130,8 @@ getInformation "\b# Slackware" 'slapt-get' "slapt-get --installed"
 ## OpenSuSE
 getInformation "\b# OpenSuSE" 'zypper' "zypper se --installed-only"
 
-echo -e "## Logiciels\n" >> "./$OUTPUT_FILE"
-
 # Enviroment vars
-getInformation "Enviroment" 'printenv'
+getInformation "Environment" 'printenv'
 
 ## Test command
 if command -v httpd &> /dev/null
