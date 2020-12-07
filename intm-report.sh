@@ -52,6 +52,7 @@ getInformation "Bios" 'dmidecode' 'dmidecode -q | head -n 100'
 # Nom du système d'exploitation
 getInformation "Informations d'utilisation actuelle" 'uname' "uname -a"
 getInformation "\b# Distribution" 'dsitro' "cat /etc/os-release"
+getInformation "\b# Host info" 'hostnamectl'
 
 # Vérification de la configuration
 getInformation "Vérification de la configuration" 'chkconfig'
